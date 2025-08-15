@@ -12,20 +12,12 @@ import unicodedata
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
 def clean_company_name(name):
-    """Clean and normalize company names for deduplication"""
     if not name:
         return ""
-    
-    # Normalize to NFC form to make Unicode characters consistent
+
     name = unicodedata.normalize("NFC", name)
-    
-    # Remove invisible Unicode characters and zero-width spaces
     name = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\u00ad]', '', name)
-    
-    # Remove any remaining invisible characters (like the ͏ characters in your sample)
     name = re.sub(r'[\u034f\u2800\u3164\uffa0\u115f\u1160\u180e\u200c\u200d]', '', name)
-    
-    # Remove common suffixes and prefixes that might cause duplicates
     suffixes_to_remove = [
         r'\s+pte\.?\s*ltd\.?$',
         r'\s+ltd\.?$',
@@ -44,20 +36,13 @@ def clean_company_name(name):
     
     for suffix in suffixes_to_remove:
         name = re.sub(suffix, '', name, flags=re.IGNORECASE)
-    
-    # Collapse multiple spaces and normalize whitespace
     name = re.sub(r'\s+', ' ', name)
-    
-    # Strip leading/trailing spaces and convert to lowercase
     name = name.strip().lower()
-    
-    # Handle some specific cases that might still cause duplicates
-    name = re.sub(r'^the\s+', '', name)  # Remove "the" at the beginning
+    name = re.sub(r'^the\s+', '', name)
     
     return name
 
 def fuzzy_match_companies(companies_set):
-    """Further deduplicate companies using fuzzy matching"""
     companies_list = list(companies_set)
     to_remove = set()
     
@@ -69,9 +54,9 @@ def fuzzy_match_companies(companies_set):
             if company2 in to_remove:
                 continue
             
-            # Check if one is a substring of another (after cleaning)
+            # Check if one is a substring of another
             if company1 in company2 or company2 in company1:
-                # Keep the shorter name (usually more canonical)
+                # Keep the shorter name
                 if len(company1) <= len(company2):
                     to_remove.add(company2)
                 else:
@@ -81,7 +66,6 @@ def fuzzy_match_companies(companies_set):
     return companies_set - to_remove
 
 def get_message_date(headers):
-    """Extract and format the date from message headers."""
     for header in headers:
         if header['name'] == 'Date':
             try:
@@ -91,7 +75,6 @@ def get_message_date(headers):
     return "Unknown Date"
 
 def fetch_all_messages(service, query):
-    """Fetch all Gmail messages matching the query (with pagination)."""
     all_messages = []
     page_token = None
 
@@ -123,13 +106,10 @@ def main():
             token.write(creds.to_json())
 
     service = build('gmail', 'v1', credentials=creds)
-
-    # To collect distinct companies
     all_companies_set = set()
-    # Keep original names for reference
     original_to_cleaned = {}
 
-    # ------------------- 1. Applied Companies -------------------
+    # Applied Companies 
     applied_query = 'from:linkedin.com "application was sent to"'
     applied_msgs = fetch_all_messages(service, applied_query)
     applied_list = []
@@ -158,7 +138,7 @@ def main():
         for date_sent, company in applied_list:
             f.write(f"{date_sent.strftime('%Y-%m-%d')} | {company}\n")
 
-    # ------------------- 2. Rejected Applications -------------------
+    # Rejected Applications
     rejected_query = 'subject:"Your application to"'
     rejected_msgs = fetch_all_messages(service, rejected_query)
     rejected_list = []
@@ -188,7 +168,7 @@ def main():
         for date_sent, details in rejected_list:
             f.write(f"{date_sent.strftime('%Y-%m-%d')} | {details}\n")
 
-    # ------------------- 3. Distinct Companies with Fuzzy Matching -------------------
+    # Distinct Companies with Fuzzy Matching 
     # Apply fuzzy matching to further reduce duplicates
     all_companies_set = fuzzy_match_companies(all_companies_set)
     
@@ -213,4 +193,5 @@ def main():
     print(f"Also created distinct_companies_simple.txt with just the cleaned names")
 
 if __name__ == '__main__':
+
     main()
